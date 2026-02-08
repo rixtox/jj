@@ -1328,8 +1328,15 @@ impl WorkspaceCommandHelper {
         git_import_export_lock: &GitImportExportLock,
     ) -> Result<(), CommandError> {
         assert!(self.may_snapshot_working_copy);
+        let workspace_name = self.workspace_name().to_owned();
+        // Check if workspace had a git_head before we start the transaction
+        let _old_workspace_git_head_present = self
+            .repo()
+            .view()
+            .get_workspace_git_head(&workspace_name)
+            .is_present();
         let mut tx = self.start_transaction();
-        jj_lib::git::import_head(tx.repo_mut()).await?;
+        jj_lib::git::import_head(tx.repo_mut(), &workspace_name).block_on()?;
         if !tx.repo().has_changes() {
             return Ok(());
         }
@@ -2318,7 +2325,27 @@ to the current parents may contain changes from multiple commits.
         #[cfg(feature = "git")]
         if self.working_copy_shared_with_git && self.env.command.should_commit_transaction() {
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                try_reset_git_head(ui, tx.repo_mut(), wc_commit, git_import_export_lock).await?;
+                // Export Git HEAD while holding the git-head lock to prevent races:
+                // - Between two finish_transaction calls updating HEAD
+                // - With import_git_head importing HEAD concurrently
+                // This can still fail if HEAD was updated concurrently by another JJ process
+                // (overlapping transaction) or a non-JJ process (e.g., git checkout). In that
+                // case, the actual state will be imported on the next snapshot.
+                match jj_lib::git::reset_head_at_workspace(
+                    tx.repo_mut(),
+                    wc_commit,
+                    self.workspace_name(),
+                    Some(self.workspace_root()),
+                )
+                .block_on()
+                {
+                    Ok(()) => {}
+                    Err(err @ jj_lib::git::GitResetHeadError::UpdateHeadRef(_)) => {
+                        writeln!(ui.warning_default(), "{err}")?;
+                        print_error_sources(ui, err.source())?;
+                    }
+                    Err(err) => return Err(err.into()),
+                }
             }
             let stats = jj_lib::git::export_refs(tx.repo_mut())?;
             print_git_export_stats(ui, &stats)?;
