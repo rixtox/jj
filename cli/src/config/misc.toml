@@ -25,6 +25,7 @@ disabled-branches = []
 # no builtin aliases
 
 [git]
+auto-register-worktrees = true
 colocate = true
 private-commits = "none()"
 sign-on-push = false
