@@ -125,6 +125,7 @@ This document contains the help content for the `jj` command-line program.
 * [`jj version`↴](#jj-version)
 * [`jj workspace`↴](#jj-workspace)
 * [`jj workspace add`↴](#jj-workspace-add)
+* [`jj workspace colocate`↴](#jj-workspace-colocate)
 * [`jj workspace forget`↴](#jj-workspace-forget)
 * [`jj workspace list`↴](#jj-workspace-list)
 * [`jj workspace rename`↴](#jj-workspace-rename)
@@ -3670,6 +3671,7 @@ Each workspace also has own sparse patterns.
 ###### **Subcommands:**
 
 * `add` — Add a workspace
+* `colocate` — Register a Git worktree for the current workspace (make it colocated)
 * `forget` — Stop tracking a workspace's working-copy commit in the repo
 * `list` — List workspaces
 * `rename` — Renames the current workspace
@@ -3719,6 +3721,18 @@ By default, the new workspace inherits the sparse patterns of the current worksp
 * `--no-colocate` — Do not create a Git worktree for the new workspace
 
    By default, the new workspace will be colocated if and only if the parent workspace is colocated. Use this flag to create a non-colocated workspace regardless of the parent's status.
+
+
+
+## `jj workspace colocate`
+
+Register a Git worktree for the current workspace (make it colocated)
+
+Adds the Git-worktree machinery — a `.git` file in the workspace plus the shared repo's worktree registration — to the current workspace so that plain `git` commands work inside it. This is the in-place equivalent of `jj workspace add --colocate` for a workspace that already exists.
+
+The repository must already be colocated (see `jj git colocation enable`). The `.jj` directory is hidden from Git via a generated `.jj/.gitignore`.
+
+**Usage:** `jj workspace colocate`
 
 
 
