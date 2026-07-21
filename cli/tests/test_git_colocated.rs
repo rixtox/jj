@@ -2933,6 +2933,125 @@ fn test_workspace_add_colocate_undo() {
 }
 
 #[test]
+fn test_workspace_colocate_existing_workspace() {
+    // This test requires git command
+    if skip_if_git_unavailable() {
+        return;
+    }
+
+    let test_env = TestEnvironment::default();
+    let work_dir = test_env.work_dir("repo");
+    let ws2 = test_env.work_dir("second");
+
+    test_env
+        .run_jj_in(".", ["git", "init", "--colocate", "repo"])
+        .success();
+    work_dir.write_file("file", "contents");
+    work_dir.run_jj(["commit", "-m", "first commit"]).success();
+
+    // A non-colocated secondary workspace has no `.git`.
+    work_dir
+        .run_jj(["workspace", "add", "--no-colocate", "../second"])
+        .success();
+    assert!(
+        !ws2.root().join(".git").exists(),
+        "a --no-colocate workspace should start without a .git"
+    );
+
+    // Colocate it in place.
+    ws2.run_jj(["workspace", "colocate"]).success();
+    assert!(
+        ws2.root().join(".git").is_file(),
+        "colocate should create a .git worktree file"
+    );
+
+    let git = |args: &[&str]| -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(ws2.root())
+            .args(args)
+            .output()
+            .expect("git command failed to run");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    };
+
+    // Git now works inside the workspace and sees a clean, non-prunable worktree
+    // that shares the main repo's object store.
+    assert_eq!(
+        git(&["status", "--porcelain"]),
+        "",
+        "git status should be clean in the newly-colocated workspace"
+    );
+    let list = git(&["worktree", "list", "--porcelain"]);
+    assert!(
+        list.contains("second") && !list.contains("prunable"),
+        "the workspace should be a valid, non-prunable worktree:\n{list}"
+    );
+    let common = git(&["rev-parse", "--git-common-dir"]);
+    assert_eq!(
+        std::fs::canonicalize(std::path::Path::new(common.trim())).ok(),
+        std::fs::canonicalize(work_dir.root().join(".git")).ok(),
+        "the workspace's git-common-dir should be the main repo's .git"
+    );
+    // jj still works in the colocated workspace.
+    ws2.run_jj(["status"]).success();
+
+    // Colocating again is an idempotent no-op.
+    let again = ws2.run_jj(["workspace", "colocate"]).success();
+    assert!(
+        again
+            .stdout
+            .normalized()
+            .to_lowercase()
+            .contains("already colocated")
+            || again
+                .stderr
+                .normalized()
+                .to_lowercase()
+                .contains("already colocated"),
+        "a second colocate should report it is already colocated:\n{}",
+        again.stdout.normalized()
+    );
+}
+
+#[test]
+fn test_workspace_colocate_requires_colocated_repo() {
+    // This test requires git command
+    if skip_if_git_unavailable() {
+        return;
+    }
+
+    let test_env = TestEnvironment::default();
+    // The test harness defaults to `git.colocate = false`, so this is a
+    // non-colocated (internal, bare Git store) repository.
+    test_env.run_jj_in(".", ["git", "init", "repo"]).success();
+    let work_dir = test_env.work_dir("repo");
+    work_dir.write_file("file", "contents");
+    work_dir.run_jj(["commit", "-m", "first commit"]).success();
+
+    // Colocate must refuse (and leave no `.git` behind) when the repo is not colocated.
+    let output = work_dir.run_jj(["workspace", "colocate"]);
+    assert!(
+        !output.status.success(),
+        "colocate should fail in a non-colocated repo"
+    );
+    assert!(
+        output.stderr.normalized().to_lowercase().contains("colocat"),
+        "the error should explain the repo is not colocated:\n{}",
+        output.stderr.normalized()
+    );
+    assert!(
+        !work_dir.root().join(".git").exists(),
+        "no .git should be left behind after a refused colocate"
+    );
+}
+
+#[test]
 fn test_workspace_add_colocate_git_failure() {
     // This test requires git command
     if skip_if_git_unavailable() {

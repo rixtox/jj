@@ -69,8 +69,10 @@ a comparison with Git, including how workflows are different, see the
   config (default `true`; distinct from `git.colocate`); pass `--colocate` / `--no-colocate`
   to `jj workspace add` to override per-command. Git HEAD and the index are kept in sync with
   each workspace's working-copy commit, lazily (a workspace's Git view refreshes on its next
-  `jj` command). jj additionally provides native support for multiple working copies backed by
-  a single repo via the `jj workspace` family of commands.
+  `jj` command). An existing non-colocated workspace can be colocated in place with
+  `jj workspace colocate` (the in-place equivalent of `jj workspace add --colocate`; distinct from
+  `jj git colocation enable`, which converts the *main* workspace). jj additionally provides native
+  support for multiple working copies backed by a single repo via the `jj workspace` family of commands.
 * **Sparse checkouts: No.** However, there's native support for sparse
   checkouts. See the `jj sparse` command.
 * **Signed commits: Yes.**
